@@ -1,7 +1,7 @@
 #!/bin/bash
 
 author=233boy
-# github=https://github.com/233boy/xray
+# 原项目: https://github.com/233boy/Xray
 
 # bash fonts colors
 red='\e[31m'
@@ -52,10 +52,10 @@ load() {
     . $is_sh_dir/src/$1
 }
 
-# wget add --no-check-certificate
+# 下载时校验 HTTPS 证书。
 _wget() {
     # [[ $proxy ]] && export https_proxy=$proxy
-    wget --no-check-certificate "$@"
+    wget "$@"
 }
 
 # yum or apt-get or apk
@@ -89,7 +89,9 @@ is_conf_dir=$is_core_dir/conf
 is_log_dir=/var/log/$is_core
 is_sh_bin=/usr/local/bin/$is_core
 is_sh_dir=$is_core_dir/sh
-is_sh_repo=$author/$is_core
+load release.sh
+is_sh_installed_ref=$(cat "$is_sh_dir/script-ref" 2>/dev/null)
+[[ ! $is_sh_installed_ref ]] && is_sh_installed_ref=$is_sh_ref
 is_pkg="wget unzip jq qrencode"
 is_config_json=$is_core_dir/config.json
 is_caddy_bin=/usr/local/bin/caddy

@@ -1,82 +1,69 @@
-get_latest_version() {
+# 默认只下载 src/release.sh 声明的教程版本。
+get_pinned_version() {
     case $1 in
-    core)
-        name=$is_core_name
-        url="https://api.github.com/repos/${is_core_repo}/releases/latest?v=$RANDOM"
-        ;;
-    sh)
-        name="$is_core_name 脚本"
-        url="https://api.github.com/repos/$is_sh_repo/releases/latest?v=$RANDOM"
-        ;;
-    caddy)
-        name="Caddy"
-        url="https://api.github.com/repos/$is_caddy_repo/releases/latest?v=$RANDOM"
-        ;;
+    core | dat) download_ver=$is_core_default_ver ;;
+    sh) download_ver=$is_sh_ref ;;
+    caddy) download_ver=$is_caddy_default_ver ;;
+    *) err "无法识别下载类型: $1" ;;
     esac
-    latest_ver=$(_wget -qO- $url | grep tag_name | grep -E -o 'v([0-9.]+)')
-    [[ ! $latest_ver ]] && {
-        err "获取 ${name} 最新版本失败."
-    }
-    unset name url
 }
+
 download() {
-    latest_ver=$2
-    [[ ! $latest_ver && $1 != 'dat' ]] && get_latest_version $1
-    # tmp dir
-    tmpdir=$(mktemp -u)
-    [[ ! $tmpdir ]] && {
-        tmpdir=/tmp/tmp-$RANDOM
+    download_ver=$2
+    [[ ! $download_ver ]] && get_pinned_version "$1"
+    [[ $1 == sh && $download_ver != "$is_sh_ref" ]] && {
+        err "教程脚本固定为 $is_sh_ref, 不能通过更新命令切换脚本版本."
     }
-    mkdir -p $tmpdir
+    tmpdir=$(mktemp -d) || err "无法创建临时目录."
     case $1 in
-    core)
+    core | dat)
         name=$is_core_name
         tmpfile=$tmpdir/$is_core.zip
-        link="https://github.com/${is_core_repo}/releases/download/${latest_ver}/${is_core}-linux-${is_core_arch}.zip"
+        link="https://github.com/${is_core_repo}/releases/download/${download_ver}/${is_core_name}-linux-${is_core_arch}.zip"
         download_file
-        unzip -qo $tmpfile -d $is_core_dir/bin
-        chmod +x $is_core_bin
+        if [[ $1 == dat ]]; then
+            unzip -qo "$tmpfile" geoip.dat geosite.dat -d "$tmpdir/data" || download_error
+            cp -f "$tmpdir/data/geoip.dat" "$tmpdir/data/geosite.dat" "$is_core_dir/bin/" || download_error
+        else
+            unzip -qo "$tmpfile" -d "$is_core_dir/bin" || download_error
+            chmod +x "$is_core_bin" || download_error
+        fi
         ;;
     sh)
         name="$is_core_name 脚本"
         tmpfile=$tmpdir/sh.zip
-        link="https://github.com/${is_sh_repo}/releases/download/${latest_ver}/code.zip"
+        link="https://codeload.github.com/${is_sh_repo}/zip/refs/tags/${download_ver}"
         download_file
-        unzip -qo $tmpfile -d $is_sh_dir
-        chmod +x $is_sh_bin
-        ;;
-    dat)
-        name="geoip.dat"
-        tmpfile=$tmpdir/geoip.dat
-        link="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
-        download_file
-        name="geosite.dat"
-        tmpfile=$tmpdir/geosite.dat
-        link="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
-        download_file
-        cp -f $tmpdir/*.dat $is_core_dir/bin/
+        install_script_archive "$tmpfile" "$is_sh_dir" || download_error
+        chmod +x "$is_sh_bin" || download_error
         ;;
     caddy)
         name="Caddy"
         tmpfile=$tmpdir/caddy.tar.gz
-        # https://github.com/caddyserver/caddy/releases/download/v2.6.4/caddy_2.6.4_linux_amd64.tar.gz
-        link="https://github.com/${is_caddy_repo}/releases/download/${latest_ver}/caddy_${latest_ver:1}_linux_${caddy_arch}.tar.gz"
+        link="https://github.com/${is_caddy_repo}/releases/download/${download_ver}/caddy_${download_ver#v}_linux_${caddy_arch}.tar.gz"
         download_file
         [[ ! $(type -P tar) ]] && {
-            rm -rf $tmpdir
+            rm -rf "$tmpdir"
             err "请安装 tar"
         }
-        tar zxf $tmpfile -C $tmpdir
-        cp -f $tmpdir/caddy $is_caddy_bin
-        chmod +x $is_caddy_bin
+        tar zxf "$tmpfile" -C "$tmpdir" || download_error
+        cp -f "$tmpdir/caddy" "$is_caddy_bin" || download_error
+        chmod +x "$is_caddy_bin" || download_error
+        ;;
+    *)
+        rm -rf "$tmpdir"
+        err "无法识别下载类型: $1"
         ;;
     esac
-    rm -rf $tmpdir
-    unset latest_ver
+    rm -rf "$tmpdir"
+    unset download_ver
 }
+
+download_error() {
+    rm -rf "$tmpdir"
+    err "下载或解压 ${name} 失败. 教程模式不会回退到最新版."
+}
+
 download_file() {
-    if ! _wget -t 5 -c $link -O $tmpfile; then
-        rm -rf $tmpdir
-        err "\n下载 ${name} 失败.\n"
-    fi
+    _wget -t 5 -c "$link" -O "$tmpfile" || download_error
 }

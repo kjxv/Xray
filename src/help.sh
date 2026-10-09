@@ -48,8 +48,8 @@ show_help() {
             "   fix-config.json                                 修复 config.json\n"
             "管理:"
             "   un, uninstall                                   卸载"
-            "   u, update [core | sh | dat | caddy] [ver]       更新"
-            "   U, update.sh                                    更新脚本"
+            "   u, update [core | sh | dat | caddy] [ver]       恢复教程固定版本; core/caddy 可显式指定版本"
+            "   U, update.sh                                    检查教程固定脚本版本"
             "   s, status                                       运行状态"
             "   start, stop, restart [caddy]                    启动, 停止, 重启"
             "   t, test                                         测试运行"
@@ -71,8 +71,10 @@ show_help() {
             msg "$v"
         done
         msg "谨慎使用 del, ddel, 此选项会直接删除配置; 无需确认"
+        msg "教程版本) $is_sh_repo / $is_sh_ref; 内核 $is_core_default_ver; Caddy $is_caddy_default_ver"
         msg "反馈问题) $(msg_ul https://github.com/${is_sh_repo}/issues) "
-        msg "文档(doc) $(msg_ul https://233boy.com/$is_core/$is_core-script/)"
+        msg "教程文档) $(msg_ul https://github.com/${is_sh_repo}/blob/${is_sh_ref}/README.md)"
+        msg "原作者文档) $(msg_ul https://233boy.com/$is_core/$is_core-script/)"
         ;;
 
     esac

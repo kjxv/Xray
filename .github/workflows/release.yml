@@ -1,31 +1,39 @@
-name: Main
+name: Publish tutorial version
 
-on: push
+on:
+  push:
+    tags:
+      - 'tutorial-*'
 
 permissions:
   contents: write
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - name: get ver
+      - name: Validate tutorial tag and scripts
         run: |
-          echo "$(cat xray.sh | grep ver=)" >> $GITHUB_ENV
-          echo "old=$(git tag | tail -n1)" >> $GITHUB_ENV
-      # - name: test
-      #   if: env.is_sh_ver == env.old 
-      #   run: |
-      #     echo not found new version.
-      #     exit 1
-      - name: zip
-        run: zip -9vr code.zip . -x .\*
-      - name: release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: code.zip
-          tag_name: ${{ env.is_sh_ver }}
+          source src/release.sh
+          [[ "$GITHUB_REPOSITORY" == "$is_sh_repo" ]]
+          [[ "$GITHUB_REF_NAME" == "$is_sh_ref" ]]
+          bash tests/tutorial-lock.sh
+      - name: Refuse to overwrite a published version
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "This tutorial version is already published. Use a new tag."
+            exit 1
+          fi
+      - name: Package
+        run: zip -9r code.zip install.sh xray.sh src README.md LICENSE docs
+      - name: Publish
+        run: |
+          gh release create "$GITHUB_REF_NAME" code.zip \
+            --verify-tag --title "$GITHUB_REF_NAME" \
+            --notes "固定视频教程版本。安装方法和版本清单见此标签下的 README.md。"

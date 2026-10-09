@@ -1,7 +1,10 @@
 #!/bin/bash
 
 author=233boy
-# github=https://github.com/233boy/xray
+# 原项目: https://github.com/233boy/Xray
+# 此处是独立安装器的引导地址，必须与 src/release.sh 一致。
+is_sh_repo=kjxv/Xray
+is_sh_ref=tutorial-v1.35
 
 # bash fonts colors
 red='\e[31m'
@@ -53,9 +56,6 @@ else
     }
 fi
 
-# wget installed or none
-is_wget=$(type -P wget)
-
 # x64
 case $(uname -m) in
 amd64 | x86_64)
@@ -80,8 +80,7 @@ is_conf_dir=$is_core_dir/conf
 is_log_dir=/var/log/$is_core
 is_sh_bin=/usr/local/bin/$is_core
 is_sh_dir=$is_core_dir/sh
-is_sh_repo=$author/$is_core
-is_pkg="wget unzip"
+is_pkg="ca-certificates wget unzip"
 is_config_json=$is_core_dir/config.json
 tmp_var_lists=(
     tmpcore
@@ -94,10 +93,8 @@ tmp_var_lists=(
 )
 
 # tmp dir
-tmpdir=$(mktemp -u)
-[[ ! $tmpdir ]] && {
-    tmpdir=/tmp/tmp-$RANDOM
-}
+tmpdir=$(mktemp -d) || err "无法创建临时目录."
+trap 'rm -rf "$tmpdir"' EXIT
 
 # set up var
 for i in ${tmp_var_lists[*]}; do
@@ -109,10 +106,10 @@ load() {
     . $is_sh_dir/src/$1
 }
 
-# wget add --no-check-certificate
+# 下载时校验 HTTPS 证书。
 _wget() {
     [[ $proxy ]] && export https_proxy=$proxy
-    wget --no-check-certificate $*
+    wget "$@"
 }
 
 # print a mesage
@@ -138,7 +135,8 @@ show_help() {
     echo -e "  -f, --core-file <path>          自定义 $is_core_name 文件路径, e.g., -f /root/${is_core}-linux-64.zip"
     echo -e "  -l, --local-install             本地获取安装脚本, 使用当前目录"
     echo -e "  -p, --proxy <addr>              使用代理下载, e.g., -p http://127.0.0.1:2333"
-    echo -e "  -v, --core-version <ver>        自定义 $is_core_name 版本, e.g., -v v1.8.1"
+    echo -e "  -v, --core-version <ver>        显式使用其他内核版本; 默认使用教程固定版本"
+    echo -e "  脚本来源: $is_sh_repo / $is_sh_ref (固定标签)"
     echo -e "  -h, --help                      显示此帮助界面\n"
 
     exit 0
@@ -180,20 +178,19 @@ install_pkg() {
 download() {
     case $1 in
     core)
-        link=https://github.com/${is_core_repo}/releases/latest/download/${is_core}-linux-${is_core_arch}.zip
-        [[ $is_core_ver ]] && link="https://github.com/${is_core_repo}/releases/download/${is_core_ver}/${is_core}-linux-${is_core_arch}.zip"
+        link="https://github.com/${is_core_repo}/releases/download/${is_core_ver}/${is_core_name}-linux-${is_core_arch}.zip"
         name=$is_core_name
         tmpfile=$tmpcore
         is_ok=$is_core_ok
         ;;
     sh)
-        link=https://github.com/${is_sh_repo}/releases/latest/download/code.zip
+        link="https://codeload.github.com/${is_sh_repo}/zip/refs/tags/${is_sh_ref}"
         name="$is_core_name 脚本"
         tmpfile=$tmpsh
         is_ok=$is_sh_ok
         ;;
     jq)
-        link=https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-$is_jq_arch
+        link="https://github.com/jqlang/jq/releases/download/${is_jq_ver}/jq-linux-$is_jq_arch"
         name="jq"
         tmpfile=$tmpjq
         is_ok=$is_jq_ok
@@ -201,8 +198,8 @@ download() {
     esac
 
     msg warn "下载 ${name} > ${link}"
-    if _wget -t 3 -q -c $link -O $tmpfile; then
-        mv -f $tmpfile $is_ok
+    if _wget -t 3 -q -c "$link" -O "$tmpfile"; then
+        mv -f "$tmpfile" "$is_ok"
     fi
 }
 
@@ -222,30 +219,18 @@ check_status() {
     }
 
     # download file status
-    if [[ $is_wget ]]; then
-        [[ ! -f $is_core_ok ]] && {
-            msg err "下载 ${is_core_name} 失败"
-            is_fail=1
-        }
-        [[ ! -f $is_sh_ok ]] && {
-            msg err "下载 ${is_core_name} 脚本失败"
-            is_fail=1
-        }
-        [[ ! -f $is_jq_ok ]] && {
-            msg err "下载 jq 失败"
-            is_fail=1
-        }
-    else
-        [[ ! $is_fail ]] && {
-            is_wget=1
-            [[ ! $is_core_file ]] && download core &
-            [[ ! $local_install ]] && download sh &
-            [[ $jq_not_found ]] && download jq &
-            get_ip
-            wait
-            check_status
-        }
-    fi
+    [[ ! -f $is_core_ok ]] && {
+        msg err "下载 ${is_core_name} 失败"
+        is_fail=1
+    }
+    [[ ! -f $is_sh_ok ]] && {
+        msg err "下载 ${is_core_name} 脚本失败"
+        is_fail=1
+    }
+    [[ ! -f $is_jq_ok ]] && {
+        msg err "下载 jq 失败"
+        is_fail=1
+    }
 
     # found fail status, remove tmp dir and exit.
     [[ $is_fail ]] && {
@@ -267,7 +252,7 @@ pass_args() {
             shift 2
             ;;
         -l | --local-install)
-            [[ ! -f ${PWD}/src/core.sh || ! -f ${PWD}/$is_core.sh ]] && {
+            [[ ! -f ${PWD}/src/core.sh || ! -f ${PWD}/src/release.sh || ! -f ${PWD}/$is_core.sh ]] && {
                 err "当前目录 (${PWD}) 非完整的脚本目录."
             }
             local_install=1
@@ -303,7 +288,7 @@ pass_args() {
 
 # exit and remove tmpdir
 exit_and_del_tmpdir() {
-    rm -rf $tmpdir
+    rm -rf "$tmpdir"
     [[ ! $1 ]] && {
         msg err "哦豁.."
         msg err "安装过程出现错误..."
@@ -323,7 +308,34 @@ main() {
     }
 
     # check parameters
-    [[ $# -gt 0 ]] && pass_args $@
+    [[ $# -gt 0 ]] && pass_args "$@"
+
+    # 先安装下载工具，再从同一固定标签读取依赖版本。
+    install_pkg $is_pkg
+    [[ ! -f $is_pkg_ok ]] && {
+        msg err "安装依赖包失败: $is_pkg"
+        exit_and_del_tmpdir
+    }
+    if [[ $local_install ]]; then
+        release_file=$PWD/src/release.sh
+    else
+        release_file=$tmpdir/release.sh
+        release_link="https://raw.githubusercontent.com/${is_sh_repo}/${is_sh_ref}/src/release.sh"
+        msg warn "读取教程版本 > $release_link"
+        _wget -t 3 -q "$release_link" -O "$release_file" || {
+            msg err "读取教程版本失败. 请先将 $is_sh_ref 标签推送到 $is_sh_repo."
+            exit_and_del_tmpdir
+        }
+    fi
+    bootstrap_repo=$is_sh_repo
+    bootstrap_ref=$is_sh_ref
+    . "$release_file" || exit_and_del_tmpdir
+    [[ $is_sh_repo != "$bootstrap_repo" || $is_sh_ref != "$bootstrap_ref" ||
+        ! $is_core_default_ver || ! $is_caddy_default_ver || ! $is_jq_ver ]] && {
+        msg err "教程版本配置不完整, 或与安装器的仓库/标签不一致."
+        exit_and_del_tmpdir
+    }
+    [[ ! $is_core_ver && ! $is_core_file ]] && is_core_ver=$is_core_default_ver
 
     # show welcome msg
     clear
@@ -333,6 +345,7 @@ main() {
 
     # start installing...
     msg warn "开始安装..."
+    msg warn "教程脚本: ${yellow}$is_sh_repo / $is_sh_ref${none}"
     [[ $is_core_ver ]] && msg warn "${is_core_name} 版本: ${yellow}$is_core_ver${none}"
     [[ $proxy ]] && msg warn "使用代理: ${yellow}$proxy${none}"
     # create tmpdir
@@ -358,22 +371,17 @@ main() {
             msg warn "${yellow}\e[4m提醒!!! 无法设置自动同步时间, 可能会影响使用 VMess 协议.${none}"
     }
 
-    # install dependent pkg
-    install_pkg $is_pkg &
-
     # jq
     if [[ $(type -P jq) ]]; then
         >$is_jq_ok
     else
         jq_not_found=1
     fi
-    # if wget installed. download core, sh, jq, get ip
-    [[ $is_wget ]] && {
-        [[ ! $is_core_file ]] && download core &
-        [[ ! $local_install ]] && download sh &
-        [[ $jq_not_found ]] && download jq &
-        get_ip
-    }
+    # 下载固定版本，不使用 latest 或原作者的脚本发布包。
+    [[ ! $is_core_file ]] && download core &
+    [[ ! $local_install ]] && download sh &
+    [[ $jq_not_found ]] && download jq &
+    get_ip
 
     # waiting for background tasks is done
     wait
@@ -408,9 +416,13 @@ main() {
 
     # copy sh file or unzip sh zip file.
     if [[ $local_install ]]; then
-        cp -rf $PWD/* $is_sh_dir
+        cp -R "$PWD/install.sh" "$PWD/xray.sh" "$PWD/src" "$PWD/README.md" "$PWD/LICENSE" "$is_sh_dir/" || exit_and_del_tmpdir
+        printf '%s\n' "$is_sh_ref" >"$is_sh_dir/script-ref" || exit_and_del_tmpdir
     else
-        unzip -qo $is_sh_ok -d $is_sh_dir
+        install_script_archive "$is_sh_ok" "$is_sh_dir" || {
+            msg err "教程脚本归档不完整, 或仓库/标签不匹配."
+            exit_and_del_tmpdir
+        }
     fi
 
     # create core bin dir
@@ -419,7 +431,7 @@ main() {
     if [[ $is_core_file ]]; then
         cp -rf $tmpdir/testzip/* $is_core_dir/bin
     else
-        unzip -qo $is_core_ok -d $is_core_dir/bin
+        unzip -qo "$is_core_ok" -d "$is_core_dir/bin" || exit_and_del_tmpdir
     fi
 
     # add alias
@@ -456,4 +468,4 @@ main() {
 }
 
 # start.
-main $@
+main "$@"

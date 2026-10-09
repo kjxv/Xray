@@ -1,4 +1,63 @@
-# 介绍
+# Xray 视频教程固定版
+
+本仓库是 [233boy/Xray](https://github.com/233boy/Xray) 的视频教程分支，由 `kjxv` 维护。它是运行在 Linux 服务器上的 **Xray 一键安装和命令行管理脚本**，提供终端菜单；不包含网页管理面板或客户端应用。
+
+教程固定标签：`tutorial-v1.35`。安装、脚本更新和重装均使用本仓库的固定版本，原作者后续修改菜单或功能不会自动影响本教程。
+
+| 内容 | 固定版本 / 来源 |
+| --- | --- |
+| 管理脚本 | `kjxv/Xray` 的 `tutorial-v1.35` 标签，原脚本版本 `v1.35` |
+| Xray 内核 | `XTLS/Xray-core` 的 `v26.3.27` |
+| Caddy（添加 TLS 协议时安装） | `caddyserver/caddy` 的 `v2.11.7` |
+| jq（系统未安装时下载） | `jqlang/jq` 的 `jq-1.7.1` |
+| geoip.dat / geosite.dat | 固定 Xray 内核发行包附带的数据 |
+
+上述默认值集中在 `src/release.sh`。系统已安装的 jq、操作系统软件包、客户端、证书及外部网站不在此版本锁定范围内。
+
+## 安装
+
+适用于有 root 权限的 Ubuntu、Debian、CentOS 或 Alpine 服务器，支持 x86_64 和 ARM64。Alpine 需要先安装 Bash 和 OpenRC。TLS 协议通常还需要域名解析及可用的 80 / 443 端口；默认安装创建 VLESS-REALITY 配置。
+
+**维护者首次使用前，需先提交这些修改并推送 `tutorial-v1.35` 标签。** 发布步骤见 [教程版本维护](docs/TUTORIAL_RELEASE.md)。标签尚未发布时，以下在线安装命令会报错，不会回退到其他版本。
+
+在 Linux 服务器以 root 身份执行：
+
+```bash
+curl -fL https://raw.githubusercontent.com/kjxv/Xray/tutorial-v1.35/install.sh -o /tmp/xray-tutorial-install.sh && bash /tmp/xray-tutorial-install.sh
+```
+
+没有 curl 时使用 wget：
+
+```bash
+wget -O /tmp/xray-tutorial-install.sh https://raw.githubusercontent.com/kjxv/Xray/tutorial-v1.35/install.sh && bash /tmp/xray-tutorial-install.sh
+```
+
+已经克隆本仓库并切换到教程标签时，也可以在仓库目录运行：
+
+```bash
+bash install.sh --local-install
+```
+
+发布标签前，维护者也可用本地安装方式验证尚未发布的改动。正式录制和向观众提供的命令应使用已发布的固定标签，不要使用 `main` 或 `releases/latest`。
+
+## 常用操作与更新行为
+
+```bash
+xray                         # 打开终端菜单
+xray add reality             # 添加 VLESS-REALITY 配置
+xray info                    # 查看配置及客户端导入链接
+xray qr                      # 显示二维码
+xray version                 # 查看脚本和内核版本
+xray help                    # 查看完整帮助及教程版本清单
+```
+
+`xray update` 默认恢复教程内核版本；`xray update caddy` 恢复教程 Caddy 版本；`xray update dat` 恢复固定内核附带的数据。`xray update sh` 和 `xray update.sh` 仅检查本教程的脚本标签，不下载上游最新脚本，也不接受其他脚本版本。
+
+显式执行 `xray update core <版本号>`、`xray update caddy <版本号>` 或安装时使用 `--core-version <版本号>`，仍可自行切换依赖版本；这样会偏离教程默认环境。`xray reinstall` 保留本机脚本快照进行本地重装，内核回到教程默认值；和原版一样，重装会经过卸载流程并重新生成配置，需要保留的配置应提前备份。
+
+项目完整作用、用途及各文件职责见 [项目说明](docs/PROJECT_OVERVIEW.md)。
+
+## 原项目介绍
 
 最好用的 Xray 一键安装脚本 & 管理脚本
 
@@ -50,7 +109,7 @@
 使用：`xray help`
 
 ```
-Xray script v1.21 by 233boy
+Xray script v1.35 by 233boy
 Usage: xray [options]... [args]...
 
 基本:
@@ -96,8 +155,8 @@ Usage: xray [options]... [args]...
 
 管理:
    un, uninstall                                   卸载
-   u, update [core | sh | dat | caddy] [ver]       更新
-   U, update.sh                                    更新脚本
+   u, update [core | sh | dat | caddy] [ver]       恢复教程固定版本; core/caddy 可显式指定版本
+   U, update.sh                                    检查教程固定脚本版本
    s, status                                       运行状态
    start, stop, restart [caddy]                    启动, 停止, 重启
    t, test                                         测试运行
@@ -118,6 +177,11 @@ Usage: xray [options]... [args]...
    h, help                                         显示此帮助界面
 
 谨慎使用 del, ddel, 此选项会直接删除配置; 无需确认
-反馈问题) https://github.com/233boy/xray/issues
-文档(doc) https://233boy.com/xray/xray-script/
+反馈问题) https://github.com/kjxv/Xray/issues
+教程文档) https://github.com/kjxv/Xray/blob/tutorial-v1.35/README.md
+原作者文档) https://233boy.com/xray/xray-script/
 ```
+
+## 来源与许可
+
+保留原作者 `233boy` 的署名、原项目文档和 GNU GPL v3 许可证。本仓库的改动主要是教程版本锁定、下载入口及发布流程调整，未改动现有协议菜单和配置管理流程。原作者在线文档可能继续更新，涉及教程安装和更新的行为请以本标签下的说明为准。

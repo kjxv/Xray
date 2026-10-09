@@ -1469,9 +1469,19 @@ get() {
         _green "安装 Caddy 成功.\n"
         ;;
     reinstall)
-        is_install_sh=$(cat $is_sh_dir/install.sh)
+        # 卸载前保留本机脚本快照，重装不重新获取 main 或上游脚本。
+        local reinstall_dir reinstall_status
+        reinstall_dir=$(mktemp -d) || err "无法创建重装临时目录."
+        cp -R "$is_sh_dir/." "$reinstall_dir/" || {
+            rm -rf "$reinstall_dir"
+            err "保存重装脚本失败."
+        }
+        is_install_sh=1
         uninstall
-        bash <<<$is_install_sh
+        (cd "$reinstall_dir" && bash install.sh --local-install)
+        reinstall_status=$?
+        rm -rf "$reinstall_dir"
+        return "$reinstall_status"
         ;;
     test-run)
         if [[ $is_alpine ]]; then
@@ -1686,7 +1696,7 @@ update() {
     2 | sh)
         is_update_name=sh
         is_show_name="$is_core_name 脚本"
-        is_run_ver=$is_sh_ver
+        is_run_ver=$is_sh_installed_ref
         is_update_repo=$is_sh_repo
         ;;
     3 | caddy)
@@ -1700,23 +1710,25 @@ update() {
         err "无法识别 ($1), 请使用: $is_core update [core | sh | caddy] [ver]"
         ;;
     esac
-    [[ $2 ]] && is_new_ver=v${2#v}
-    [[ $is_run_ver == $is_new_ver ]] && {
-        msg "\n自定义版本和当前 $is_show_name 版本一样, 无需更新.\n"
-        exit
-    }
+    is_new_ver=
     load download.sh
-    if [[ $is_new_ver ]]; then
-        msg "\n使用自定义版本更新 $is_show_name: $(_green $is_new_ver)\n"
+    if [[ $2 ]]; then
+        if [[ $is_update_name == sh ]]; then
+            [[ $2 != "$is_sh_ref" ]] && err "教程脚本固定为 $is_sh_ref, 不支持切换脚本版本."
+            is_new_ver=$2
+        else
+            is_new_ver=v${2#v}
+        fi
     else
-        get_latest_version $is_update_name
-        [[ $is_run_ver == $latest_ver ]] && {
-            msg "\n$is_show_name 当前已经是最新版本了.\n"
-            exit
-        }
-        msg "\n发现 $is_show_name 新版本: $(_green $latest_ver)\n"
-        is_new_ver=$latest_ver
+        get_pinned_version "$is_update_name"
+        is_new_ver=$download_ver
+        unset download_ver
     fi
+    [[ $is_run_ver == $is_new_ver ]] && {
+        msg "\n$is_show_name 当前已是指定版本 ($is_new_ver), 无需更新.\n"
+        return
+    }
+    msg "\n使用指定版本更新 $is_show_name: $(_green $is_new_ver)\n"
     download $is_update_name $is_new_ver
     msg "更新成功, 当前 $is_show_name 版本: $(_green $is_new_ver)\n"
     msg "$(_green 请查看更新说明: https://github.com/$is_update_repo/releases/tag/$is_new_ver)\n"
@@ -1911,6 +1923,7 @@ main() {
             is_update_ver=
         }
         if [[ $2 == 'dat' ]]; then
+            [[ $3 ]] && err "教程规则数据固定为 $is_core_default_ver 内核包附带的版本."
             load download.sh
             download dat
             msg "$(_green 更新 geoip.dat geosite.dat 成功.)\n"
